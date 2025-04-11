@@ -1,39 +1,51 @@
+# app.py
 import streamlit as st
 import pandas as pd
-import numpy as np
-import joblib as joblib
+import joblib
 
-# Load model and encoders
-model = joblib.load("model.pkl")                # Trained Model
-le = joblib.load("label_encoder.pkl")           # LabelEncoder used on BattingTeam
-y_pred = joblib.load("y_pred.pkl")              # Predictions from training script
-y_test = joblib.load("y_test.pkl")              # Ground truth from test set
+# Load model and column headers
+model = joblib.load('ipl_score_model.pkl')
+model_columns = joblib.load('model_columns.pkl')
 
-# Create team mapping from encoder
-teams = le.classes_
-team_mapping = dict(zip(le.transform(teams), teams))
+st.set_page_config(page_title="IPL Run Predictor", layout="centered")
+st.title("🏏 IPL Next Ball Run Predictor")
 
-# Streamlit app UI
-st.title("IPL Team Score Predictor")
+# UI Inputs
+st.subheader("Match Situation")
 
-st.write("This app predicts the total score for a team in a given innings based on IPL match data.")
+batting_team = st.selectbox("Select Batting Team", [
+    'Chennai Super Kings', 'Mumbai Indians', 'Royal Challengers Bangalore',
+    'Kolkata Knight Riders', 'Delhi Capitals', 'Punjab Kings',
+    'Rajasthan Royals', 'Sunrisers Hyderabad', 'Lucknow Super Giants',
+    'Gujarat Titans'
+])
 
-# Inputs
-team_name = st.selectbox("Team", list(teams))
-innings = st.selectbox("Innings", [1, 2])
-mae = st.slider("Margin of Error (MAE)", min_value=1, max_value=100, value=40)
+bowler = st.text_input("Enter Bowler Name", "Jasprit Bumrah")
+batter = st.text_input("Enter Batter Name", "Virat Kohli")
+non_striker = st.text_input("Enter Non-Striker Name", "Faf du Plessis")
 
-# Predict when user clicks button
-if st.button("Predict"):
-    team_id = le.transform([team_name])[0]
-    sample_input = pd.DataFrame([[team_id, innings]], columns=['BattingTeam', 'innings'])
-    predicted_score = int(model.predict(sample_input)[0])
+overs = st.number_input("Overs Completed", min_value=0.0, max_value=20.0, step=0.1)
+ballnumber = st.number_input("Ball Number in Current Over", min_value=1, max_value=6, step=1)
 
-    within_margin = np.abs(y_pred - y_test) <= mae
-    confidence = np.mean(within_margin) * 100
+if st.button("🔍 Predict Runs for Next Ball"):
+    # Construct input DataFrame
+    input_dict = {
+        'batting_team': batting_team,
+        'bowler': bowler,
+        'batter': batter,
+        'non_striker': non_striker,
+        'overs': overs,
+        'ballnumber': ballnumber
+    }
 
-    st.subheader("Prediction Result")
-    st.write("Team:", team_name)
-    st.write("Innings:", innings)
-    st.write("Predicted Score:", f"{predicted_score} ± {mae} runs")
-    st.write("Confidence (within margin):", f"{confidence:.2f}%")
+    input_df = pd.DataFrame([input_dict])
+
+    # One-hot encode and align with training columns
+    input_encoded = pd.get_dummies(input_df)
+    input_encoded = input_encoded.reindex(columns=model_columns, fill_value=0)
+
+    # Make prediction
+    predicted_run = model.predict(input_encoded)[0]
+
+    st.markdown("### 🎯 Predicted Runs:")
+    st.success(f"👉 **{round(predicted_run, 2)}** runs expected on this ball.")
